@@ -7,12 +7,12 @@
     "theme_color": "#6200ea",
     "icons": [
         {
-            "src": "./assistive.png",
+            "src": "assistive.png",
             "sizes": "192x192",
             "type": "image/png"
         },
         {
-            "src": "./assistive1.png",
+            "src": "assistive1.png",
             "sizes": "512x512",
             "type": "image/png"
         }
