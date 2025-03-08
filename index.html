@@ -13,11 +13,11 @@
     body { background-color: #f8fafc; }
     .animate-fade-in { animation: fadeIn 0.8s ease-out forwards; }
     @keyframes fadeIn { 0% { opacity: 0; transform: translateY(-20px); } 100% { opacity: 1; transform: translateY(0); } }
-    /* .command-card {
+    .command-card {
       background-color: #fff;
       border: 1px solid #e2e8f0;
       transition: transform 0.3s, box-shadow 0.3s;
-    } */
+    }
     .command-card:hover {
       transform: scale(1.05);
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
@@ -48,9 +48,27 @@
       animation: fadeIn 0.5s forwards;
       z-index: 1000;
     }
+    .logout-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: #dc2626;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      transition: background-color 0.3s, transform 0.3s;
+    }
+    .logout-btn:hover {
+      background-color: #b91c1c;
+      transform: scale(1.05);
+    }
   </style>
 </head>
-<body class="min-h-screen flex items-center justify-center">
+<body class="min-h-screen flex items-center justify-center relative">
+  <!-- Logout Button in Header -->
+  <button class="logout-btn" onclick="logoutUser()">Logout</button>
+  
   <div class="container mx-auto p-6 text-center animate-fade-in max-w-3xl">
     <header class="mb-8">
       <h1 class="text-4xl font-bold text-blue-700 mb-2">Voice Command Navigation</h1>
@@ -74,35 +92,43 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="script.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
-
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
   <script>
-    // Replace with your Firebase config
+    // Firebase configuration
     const firebaseConfig = {
-        apiKey: "AIzaSyDZMVmPZMwqSZo4Sa5yD2fWOOHCkEndctc",
-  authDomain: "blind-stick-b04e0.firebaseapp.com",
-  projectId: "blind-stick-b04e0",
-  storageBucket: "blind-stick-b04e0.firebasestorage.app",
-  messagingSenderId: "240768410871",
-  appId: "1:240768410871:web:02a1e5349b0499157d1ff2",
-  measurementId: "G-BHDH10QF5L"
+      apiKey: "AIzaSyDZMVmPZMwqSZo4Sa5yD2fWOOHCkEndctc",
+      authDomain: "blind-stick-b04e0.firebaseapp.com",
+      projectId: "blind-stick-b04e0",
+      storageBucket: "blind-stick-b04e0.firebasestorage.app",
+      messagingSenderId: "240768410871",
+      appId: "1:240768410871:web:02a1e5349b0499157d1ff2",
+      measurementId: "G-BHDH10QF5L"
     };
+
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-
+    // Function to show popup notifications
     function showPopup(message) {
       const popup = document.createElement('div');
       popup.className = 'custom-popup';
       popup.textContent = message;
       document.body.appendChild(popup);
       setTimeout(() => { popup.remove(); }, 3000);
+    }
+
+    // Logout function: Sign out the user and redirect to login page
+    function logoutUser() {
+      auth.signOut()
+        .then(() => {
+          showPopup("Logout successful!");
+          window.location.href = "login.html";
+        })
+        .catch(error => {
+          showPopup("Error logging out: " + error.message);
+        });
     }
 
     // Retrieve user data and display commands
@@ -115,12 +141,11 @@
         const userData = userDoc.data();
         const selectedFeatures = userData.selectedFeatures || [];
         
-        // Show popup with preferred options
+        // Show popup with preferred options and speak the message aloud
         if (selectedFeatures.length > 0) {
           const popupMsg = "Your preferred options are: " + selectedFeatures.join(", ");
           showPopup(popupMsg);
           
-          // Speak out the message using the Web Speech API
           if ('speechSynthesis' in window) {
             const utterance = new SpeechSynthesisUtterance(popupMsg);
             utterance.lang = "en-US";
@@ -166,7 +191,7 @@
         recognition.onresult = function (event) {
           const command = event.results[0][0].transcript.toLowerCase();
           console.log("Command received: " + command);
-          if (command.includes("detect object")) {
+          if (command.includes("object detection")) {
             window.location.href = "object.html";
           } else if (command.includes("outdoor navigation")) {
             window.location.href = "map.html";
@@ -174,7 +199,7 @@
             window.location.href = "indoormap.html";
           } else if (command.includes("describe object")) {
             window.location.href = "describe.html";
-          } else if (command.includes("money")) {
+          } else if (command.includes("currency detection")) {
             window.location.href = "money.html";
           } else {
             showPopup("Command not recognized. Please try again!");
