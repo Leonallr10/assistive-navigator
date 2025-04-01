@@ -61,7 +61,7 @@
     </div>
 
     <!-- Home Button -->
-    <button id="home-button" class="absolute top-5 left-5 p-3 bg-white rounded-full shadow hover:bg-gray-200" onclick="goToCurrentLocation()"><a href="/index.html">🏠</a></button>
+    <button id="home-button" class="absolute top-5 left-5 p-3 bg-white rounded-full shadow hover:bg-gray-200" onclick="goToCurrentLocation()">  <a href="/index.html">🏠</a></button>
 
     <!-- Map Container -->
     <div id="map" class="mb-4 rounded shadow"></div>
@@ -152,23 +152,20 @@
 
     // Calculate route using Nominatim and Leaflet Routing Machine
     async function calculateRoute() {
-      const from = document.getElementById("from").value;
       const to = document.getElementById("to").value;
-      if (!from || !to) {
-        alert("Please enter both locations.");
+      if (!marker) {
+        alert("Current location not available.");
+        return;
+      }
+      if (!to) {
+        alert("Please enter a destination.");
         return;
       }
       try {
-        // Get starting coordinates
-        const fromResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(from)}`);
-        const fromData = await fromResponse.json();
-        if (!fromData.length) {
-          alert("Invalid starting location.");
-          return;
-        }
-        const fromCoords = [parseFloat(fromData[0].lat), parseFloat(fromData[0].lon)];
+        // Use current coordinates from marker for starting point
+        const fromCoords = [marker.getLatLng().lat, marker.getLatLng().lng];
 
-        // Get destination coordinates
+        // Get destination coordinates using Nominatim
         const toResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(to)}`);
         const toData = await toResponse.json();
         if (!toData.length) {
@@ -178,15 +175,10 @@
         const toCoords = [parseFloat(toData[0].lat), parseFloat(toData[0].lon)];
         destinationCoords = toCoords;
 
-        if (!marker) {
-          marker = L.marker(fromCoords, { draggable: true })
-            .addTo(map)
-            .bindPopup("You are here")
-            .openPopup();
-          marker.on('dragend', () => updateRouteAndDirections());
-        } else {
-          marker.setLatLng(fromCoords);
-        }
+        // Update marker to current position (if not already updated)
+        marker.setLatLng(fromCoords);
+
+        // Remove any existing route control
         if (routeControl) {
           map.removeControl(routeControl);
         }
