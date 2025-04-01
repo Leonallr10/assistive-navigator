@@ -1,378 +1,403 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Accessible Route Navigator</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.5/font/bootstrap-icons.min.css">
-    <!-- Google Maps API -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDNKaWDMEbgOlQsunebgM0o87wzAlxq1A0&libraries=places" async defer></script>
-    <style>
-        /* Smooth animations */
-        .fade-in {
-            animation: fadeIn 0.7s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .slide-up {
-            animation: slideUp 0.5s ease-out;
-        }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Navigation Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    #map {
+      height: 60vh;
+      width: 100%;
+    }
+    #direction-panel {
+      overflow-y: auto;
+    }
+    #hotspot-list {
+      overflow-y: auto;
+    }
+  </style>
 </head>
+<body class="bg-gray-100 font-sans">
+  <!-- Navigation Bar -->
+  <nav class="bg-gray-800 p-4">
+    <div class="container mx-auto">
+      <h1 class="text-white text-xl font-bold">Navigation Pro</h1>
+    </div>
+  </nav>
 
-<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="container mx-auto max-w-xl bg-white shadow-2xl rounded-2xl p-8 space-y-6 fade-in">
-        <h1 class="text-3xl font-bold text-center text-blue-600 mb-6">Accessible Route Navigator</h1>
-
-        <div class="space-y-6">
-            <!-- Location Section -->
-            <div class="bg-gray-50 p-4 rounded-lg shadow-md slide-up">
-                <h2 class="text-xl font-semibold mb-3 flex items-center">
-                    <i class="bi bi-geo-alt-fill text-red-500 mr-2"></i> Current Location
-                </h2>
-                <div class="flex space-x-2">
-                    <input id="start-lat" type="text" readonly
-                        class="w-1/2 bg-gray-200 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Latitude">
-                    <input id="start-lng" type="text" readonly
-                        class="w-1/2 bg-gray-200 p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Longitude">
-                </div>
-                <p id="location-description" class="mt-2 text-sm text-gray-600"></p>
-            </div>
-
-            <!-- Destination Input Section -->
-            <div class="bg-gray-50 p-4 rounded-lg shadow-md slide-up">
-                <h2 class="text-xl font-semibold mb-3 flex items-center">
-                    <i class="bi bi-signpost-2-fill text-green-500 mr-2"></i> Destination
-                </h2>
-                <div class="flex space-x-2">
-                    <input id="end-address" type="text"
-                        class="flex-grow p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
-                        placeholder="Speak or type destination">
-                    <button id="mic-btn" onclick="toggleMicrophone()"
-                        class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition duration-300">
-                        <i class="bi bi-mic-fill"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Route Generation Section -->
-            <div class="flex space-x-2 slide-up">
-                <button id="route-btn" onclick="calculateAndSpeakDetailedRoute()"
-                    class="flex-grow bg-green-500 text-white p-3 rounded shadow-md hover:bg-green-600 transition duration-300 disabled:opacity-50"
-                    disabled>
-                    <i class="bi bi-map-fill mr-2"></i> Generate Walking Route
-                </button>
-            </div>
-
-            <!-- Voice Controls -->
-            <div id="voice-controls" class="hidden space-y-4 slide-up">
-                <div class="grid grid-cols-2 gap-2">
-                    <button onclick="pauseDirections()"
-                        class="bg-yellow-500 text-white p-2 rounded hover:bg-yellow-600 transition duration-300">
-                        ⏸️ Pause Directions
-                    </button>
-                    <button onclick="resumeDirections()"
-                        class="bg-green-500 text-white p-2 rounded hover:bg-green-600 transition duration-300">
-                        ▶️ Resume
-                    </button>
-                    <button onclick="repeatDirections()"
-                        class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition duration-300">
-                        🔁 Repeat Directions
-                    </button>
-                    <button onclick="speakNextStep()"
-                        class="bg-purple-500 text-white p-2 rounded hover:bg-purple-600 transition duration-300">
-                        ➡️ Next Step
-                    </button>
-                </div>
-                <div class="space-y-2">
-                    <label class="block text-sm font-medium text-gray-700">Voice Speed</label>
-                    <input type="range" id="speech-rate" min="0.5" max="2" step="0.1" value="1"
-                        class="w-full accent-blue-500 transition duration-300">
-                </div>
-            </div>
-
-            <!-- Directions Display -->
-            <div id="directions"
-                class="bg-gray-100 p-4 rounded text-sm max-h-60 overflow-y-auto shadow-inner slide-up"></div>
+  <div class="container mx-auto px-4 py-4">
+    <!-- Controls -->
+    <div id="controls" class="mb-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <input type="text" id="from" class="w-full p-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Starting location">
+          <button class="w-full mt-2 p-2 border border-gray-300 rounded hover:bg-gray-200" onclick="startSpeechRecognition('from')">🎤</button>
         </div>
+        <div>
+          <input type="text" id="to" class="w-full p-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Destination">
+          <button class="w-full mt-2 p-2 border border-gray-300 rounded hover:bg-gray-200" onclick="startSpeechRecognition('to')">🎤</button>
+        </div>
+        <div>
+          <button class="w-full p-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700" onclick="calculateRoute()">Get Route</button>
+        </div>
+        <div>
+          <select id="hotspot-type" class="w-full p-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="hospital">Hospitals</option>
+            <option value="restaurant">Restaurants</option>
+            <option value="school">Schools</option>
+            <option value="bank">Banks</option>
+          </select>
+          <button class="w-full mt-2 p-2 bg-gray-600 text-white rounded shadow hover:bg-gray-700" onclick="findNearbyHotspots()">Find Nearby</button>
+        </div>
+      </div>
     </div>
 
-    <script>
-        // Smooth scroll for directions
-        document.getElementById('directions').addEventListener('DOMNodeInserted', function () {
-            this.scrollTop = this.scrollHeight;
+    <!-- Home Button -->
+    <button id="home-button" class="absolute top-5 left-5 p-3 bg-white rounded-full shadow hover:bg-gray-200" onclick="goToCurrentLocation()">🏠</button>
+
+    <!-- Map Container -->
+    <div id="map" class="mb-4 rounded shadow"></div>
+
+    <!-- Direction Panel -->
+    <div id="direction-panel" class="bg-white p-4 rounded shadow mb-4 h-20 border border-gray-200">
+      Direction instructions will appear here...
+    </div>
+
+    <!-- Hotspot List Panel -->
+    <div id="hotspot-list" class="bg-white p-4 rounded shadow h-40 border border-gray-200">
+      Nearby hotspots will appear here...
+    </div>
+  </div>
+
+  <!-- Leaflet JS and Routing Machine -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+  <script>
+    let map = L.map('map').setView([20, 77], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    let marker;
+    let routeControl;
+    let destinationCoords = null;
+    let watchId = null;
+    let hotspotMarkers = [];
+
+    // Center map on current location and setup marker
+    function goToCurrentLocation() {
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by this browser.");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(position => {
+        const { latitude, longitude } = position.coords;
+        map.setView([latitude, longitude], 13);
+        if (!marker) {
+          marker = L.marker([latitude, longitude], { draggable: true })
+            .addTo(map)
+            .bindPopup("You are here")
+            .openPopup();
+          marker.on('dragend', () => {
+            updateRouteAndDirections();
+            reverseGeocode(marker.getLatLng().lat, marker.getLatLng().lng);
+          });
+        } else {
+          marker.setLatLng([latitude, longitude]);
+        }
+        reverseGeocode(latitude, longitude);
+        startWatchingPosition();
+      }, error => {
+        console.error("Geolocation error:", error);
+        alert("Unable to retrieve your location.");
+      }, { enableHighAccuracy: true });
+    }
+
+    // Reverse geocoding for human-readable address
+    function reverseGeocode(lat, lon) {
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.display_name) {
+            document.getElementById('from').value = data.display_name;
+          }
+        })
+        .catch(error => {
+          console.error("Reverse geocoding error:", error);
         });
-    </script>
-</body>
+    }
 
-</html>
+    // Speech recognition for input fields
+    function startSpeechRecognition(inputId) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("Speech recognition is not supported in this browser.");
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.start();
+      recognition.onresult = function (event) {
+        document.getElementById(inputId).value = event.results[0][0].transcript;
+      };
+    }
 
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-        import { 
-            getFirestore, 
-            collection, 
-            addDoc, 
-            query, 
-            orderBy, 
-            limit, 
-            getDocs, 
-            deleteDoc 
-        } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js';
+    // Calculate route using Nominatim and Leaflet Routing Machine
+    async function calculateRoute() {
+      const from = document.getElementById("from").value;
+      const to = document.getElementById("to").value;
+      if (!from || !to) {
+        alert("Please enter both locations.");
+        return;
+      }
+      try {
+        // Get starting coordinates
+        const fromResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(from)}`);
+        const fromData = await fromResponse.json();
+        if (!fromData.length) {
+          alert("Invalid starting location.");
+          return;
+        }
+        const fromCoords = [parseFloat(fromData[0].lat), parseFloat(fromData[0].lon)];
 
-        let map, directionsService, directionsRenderer, geocoder, recognition;
-        let currentDirections = [];
-        let speechSynthesis = window.speechSynthesis;
-        let currentUtterance = null;
-        let currentStepIndex = 0;
+        // Get destination coordinates
+        const toResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(to)}`);
+        const toData = await toResponse.json();
+        if (!toData.length) {
+          alert("Invalid destination.");
+          return;
+        }
+        const toCoords = [parseFloat(toData[0].lat), parseFloat(toData[0].lon)];
+        destinationCoords = toCoords;
 
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCYLKUR-T2z2LZ2v2liicywsuBhmY3Nz8I",
-            authDomain: "message-blind-stick.firebaseapp.com",
-            projectId: "message-blind-stick",
-            storageBucket: "message-blind-stick.firebasestorage.app",
-            messagingSenderId: "1041278794924",
-            appId: "1:1041278794924:web:1eea3811346ba1d933b309",
-            measurementId: "G-W8PTM3C9B4"
+        if (!marker) {
+          marker = L.marker(fromCoords, { draggable: true })
+            .addTo(map)
+            .bindPopup("You are here")
+            .openPopup();
+          marker.on('dragend', () => updateRouteAndDirections());
+        } else {
+          marker.setLatLng(fromCoords);
+        }
+        if (routeControl) {
+          map.removeControl(routeControl);
+        }
+        routeControl = L.Routing.control({
+          waypoints: [
+            L.latLng(fromCoords[0], fromCoords[1]),
+            L.latLng(toCoords[0], toCoords[1])
+          ],
+          routeWhileDragging: true,
+          createMarker: function (i, wp) {
+            return L.marker(wp.latLng, { draggable: false });
+          }
+        }).addTo(map);
+        routeControl.on('routesfound', function (e) {
+          let routes = e.routes;
+          if (routes.length) {
+            let summary = routes[0].summary;
+            let instructionText = `Route found. Distance: ${Math.round(summary.totalDistance)} meters, estimated time: ${Math.round(summary.totalTime / 60)} minutes.`;
+            document.getElementById('direction-panel').innerText = instructionText;
+            speakText(instructionText);
+          }
+        });
+      } catch (error) {
+        console.error("Error calculating route:", error);
+      }
+    }
+
+    // Find nearby hotspots using Overpass API
+    function findNearbyHotspots() {
+      if (!marker) {
+        alert("Please locate yourself first.");
+        return;
+      }
+      
+      // Clear existing hotspot markers and list entries
+      hotspotMarkers.forEach(m => map.removeLayer(m));
+      hotspotMarkers = [];
+      document.getElementById('hotspot-list').innerHTML = "Searching for nearby hotspots...";
+
+      const hotspotType = document.getElementById("hotspot-type").value;
+      const userLocation = marker.getLatLng();
+      const radius = 1000; // meters
+
+      const overpassQuery = `
+        [out:json];
+        (
+          node["amenity"="${hotspotType}"](around:${radius},${userLocation.lat},${userLocation.lng});
+          way["amenity"="${hotspotType}"](around:${radius},${userLocation.lat},${userLocation.lng});
+          relation["amenity"="${hotspotType}"](around:${radius},${userLocation.lat},${userLocation.lng});
+        );
+        out center;
+      `;
+      
+      fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`)
+        .then(response => response.json())
+        .then(data => {
+          let hotspots = [];
+          data.elements.forEach(element => {
+            let lat = element.lat || (element.center && element.center.lat);
+            let lon = element.lon || (element.center && element.center.lon);
+            if (lat && lon) {
+              let name = element.tags && element.tags.name ? element.tags.name : "Unnamed Place";
+              hotspots.push({ name, lat: parseFloat(lat), lon: parseFloat(lon) });
+            }
+          });
+          displayHotspots(hotspots);
+        })
+        .catch(error => {
+          console.error("Error fetching hotspots:", error);
+          document.getElementById('hotspot-list').innerHTML = "Error retrieving hotspots.";
+        });
+    }
+
+    // Display hotspot markers on the map and update hotspot list
+    function displayHotspots(hotspots) {
+      const listContainer = document.getElementById('hotspot-list');
+      if (!hotspots.length) {
+        listContainer.innerHTML = "No nearby hotspots found.";
+        return;
+      }
+      listContainer.innerHTML = "<strong>Nearby Hotspots:</strong><br>";
+      hotspots.forEach(hotspot => {
+        // Create marker on the map
+        let m = L.marker([hotspot.lat, hotspot.lon])
+          .addTo(map)
+          .bindTooltip(hotspot.name)
+          .bindPopup(hotspot.name)
+          .on('click', () => {
+            destinationCoords = [hotspot.lat, hotspot.lon];
+            calculateRouteToDestination(hotspot.lat, hotspot.lon);
+          });
+        hotspotMarkers.push(m);
+
+        // Add hotspot to the list with a clickable entry
+        let listItem = document.createElement('div');
+        listItem.className = "cursor-pointer py-1 border-b border-gray-200";
+        listItem.innerText = hotspot.name;
+        listItem.onclick = () => {
+          map.setView([hotspot.lat, hotspot.lon], 16);
+          destinationCoords = [hotspot.lat, hotspot.lon];
+          calculateRouteToDestination(hotspot.lat, hotspot.lon);
         };
+        listContainer.appendChild(listItem);
+      });
+    }
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const locationsRef = collection(db, "user_locations");
-
-        function initMap() {
-            map = new google.maps.Map(document.createElement('div'), {
-                center: { lat: 37.773972, lng: -122.431297 },
-                zoom: 14
-            });
-            directionsService = new google.maps.DirectionsService();
-            directionsRenderer = new google.maps.DirectionsRenderer();
-            geocoder = new google.maps.Geocoder();
+    // Calculate a route to a selected destination (hotspot click)
+    function calculateRouteToDestination(destLat, destLon) {
+      if (!marker) {
+        alert("Please locate yourself first.");
+        return;
+      }
+      const fromCoords = marker.getLatLng();
+      if (routeControl) {
+        map.removeControl(routeControl);
+      }
+      destinationCoords = [destLat, destLon];
+      routeControl = L.Routing.control({
+        waypoints: [
+          L.latLng(fromCoords.lat, fromCoords.lng),
+          L.latLng(destLat, destLon)
+        ],
+        routeWhileDragging: true,
+        createMarker: function (i, wp) {
+          return L.marker(wp.latLng, { draggable: false });
         }
-
-        function toggleMicrophone() {
-            const micBtn = document.getElementById("mic-btn");
-            const endAddressInput = document.getElementById("end-address");
-
-            // Speech Recognition Setup
-            if (!recognition) {
-                recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-                recognition.lang = 'en-US';
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                
-                recognition.onresult = function(event) {
-                    const transcript = event.results[0][0].transcript;
-                    endAddressInput.value = transcript;
-                    micBtn.classList.remove("bg-red-500");
-                    micBtn.classList.add("bg-blue-500");
-                    validateInputs();
-                    speakText(`Destination set to ${transcript}`);
-                };
-                
-                recognition.onstart = function() {
-                    micBtn.classList.remove("bg-blue-500");
-                    micBtn.classList.add("bg-red-500");
-                };
-                
-                recognition.onend = function() {
-                    micBtn.classList.remove("bg-red-500");
-                    micBtn.classList.add("bg-blue-500");
-                    recognition = null;
-                };
-
-                recognition.start();
-            } else {
-                recognition.stop();
-            }
+      }).addTo(map);
+      routeControl.on('routesfound', function (e) {
+        let routes = e.routes;
+        if (routes.length) {
+          let summary = routes[0].summary;
+          let instructionText = `New route found. Distance: ${Math.round(summary.totalDistance)} meters, estimated time: ${Math.round(summary.totalTime / 60)} minutes.`;
+          document.getElementById('direction-panel').innerText = instructionText;
+          speakText(instructionText);
         }
+      });
+    }
 
-        function validateInputs() {
-            const startLat = document.getElementById("start-lat").value;
-            const startLng = document.getElementById("start-lng").value;
-            const endAddress = document.getElementById("end-address").value;
-            const routeBtn = document.getElementById("route-btn");
-            
-            routeBtn.disabled = !(startLat && startLng && endAddress);
+    // Update route when the current location changes (e.g., after dragging the marker)
+    function updateRouteAndDirections() {
+      if (!destinationCoords) return;
+      const currentPos = marker.getLatLng();
+      if (routeControl) {
+        map.removeControl(routeControl);
+      }
+      routeControl = L.Routing.control({
+        waypoints: [
+          L.latLng(currentPos.lat, currentPos.lng),
+          L.latLng(destinationCoords[0], destinationCoords[1])
+        ],
+        routeWhileDragging: true,
+        createMarker: function (i, wp) {
+          return L.marker(wp.latLng, { draggable: false });
         }
+      }).addTo(map);
+    }
 
-        function calculateAndSpeakDetailedRoute() {
-            const startLat = parseFloat(document.getElementById("start-lat").value);
-            const startLng = parseFloat(document.getElementById("start-lng").value);
-            const endAddress = document.getElementById("end-address").value;
-
-            geocoder.geocode({ address: endAddress }, function(results, status) {
-                if (status === google.maps.GeocoderStatus.OK) {
-                    const endLocation = results[0].geometry.location;
-                    const request = {
-                        origin: { lat: startLat, lng: startLng },
-                        destination: endLocation,
-                        travelMode: google.maps.TravelMode.WALKING
-                    };
-
-                    directionsService.route(request, function(result, status) {
-                        if (status === google.maps.DirectionsStatus.OK) {
-                            const steps = result.routes[0].legs[0].steps;
-                            const directionsPanel = document.getElementById("directions");
-                            
-                            // Detailed formatted directions with distances
-                            directionsPanel.innerHTML = steps
-                                .map((step, index) => 
-                                    `Step ${index + 1}: ${step.instructions} (${step.distance.text})`
-                                )
-                                .join('<br><br>');
-                            
-                            processDetailedRoute(steps);
-                            document.getElementById('voice-controls').classList.remove('hidden');
-                        } else {
-                            speakText("Failed to generate route");
-                        }
-                    });
-                } else {
-                    speakText("Could not find destination");
-                }
-            });
+    // Watch user's position for real-time updates and provide bearing-based directions
+    function startWatchingPosition() {
+      if (!navigator.geolocation) return;
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      watchId = navigator.geolocation.watchPosition(position => {
+        const { latitude, longitude } = position.coords;
+        if (marker) {
+          marker.setLatLng([latitude, longitude]);
         }
-
-        function processDetailedRoute(steps) {
-            currentDirections = steps.map((step, index) => ({
-                instruction: step.instructions.replace(/<[^>]*>/g, ""),
-                distance: step.distance.text
-            }));
-            
-            currentStepIndex = 0;
-            
-            const totalDistance = currentDirections.reduce((sum, step) => {
-                const numericDistance = parseFloat(step.distance.replace(/[^\d.]/g, ''));
-                return sum + numericDistance;
-            }, 0);
-
-            speakText(`Route generated. Total distance is ${totalDistance.toFixed(1)} kilometers. 
-                      Press 'Next Step' to start walking guidance.`);
+        if (destinationCoords) {
+          let bearing = calculateBearing(latitude, longitude, destinationCoords[0], destinationCoords[1]);
+          let direction = getDirectionFromBearing(bearing);
+          let instructionText = `You are heading ${direction}.`;
+          document.getElementById('direction-panel').innerText = instructionText;
+          speakText(instructionText);
         }
+      }, err => {
+        console.error("Error watching position:", err);
+      }, { enableHighAccuracy: true, maximumAge: 0 });
+    }
 
-        function speakNextStep() {
-            if (currentStepIndex < currentDirections.length) {
-                const currentStep = currentDirections[currentStepIndex];
-                const speechText = `Step ${currentStepIndex + 1}: Walk ${currentStep.distance}. ${currentStep.instruction}`;
-                
-                speakText(speechText);
-                currentStepIndex++;
-            } else {
-                speakText("You have reached your destination");
-            }
-        }
+    // Calculate bearing between two coordinates (in degrees)
+    function calculateBearing(lat1, lon1, lat2, lon2) {
+      const toRad = Math.PI / 180;
+      const y = Math.sin((lon2 - lon1) * toRad) * Math.cos(lat2 * toRad);
+      const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+                Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos((lon2 - lon1) * toRad);
+      let brng = Math.atan2(y, x) * (180 / Math.PI);
+      return (brng + 360) % 360;
+    }
 
-        function fetchAndDisplayLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(async (position) => {
-                    const { latitude, longitude } = position.coords;
+    // Convert bearing in degrees to cardinal direction
+    function getDirectionFromBearing(bearing) {
+      if (bearing >= 337.5 || bearing < 22.5) return "North";
+      if (bearing >= 22.5 && bearing < 67.5) return "North-East";
+      if (bearing >= 67.5 && bearing < 112.5) return "East";
+      if (bearing >= 112.5 && bearing < 157.5) return "South-East";
+      if (bearing >= 157.5 && bearing < 202.5) return "South";
+      if (bearing >= 202.5 && bearing < 247.5) return "South-West";
+      if (bearing >= 247.5 && bearing < 292.5) return "West";
+      if (bearing >= 292.5 && bearing < 337.5) return "North-West";
+      return "";
+    }
 
-                    try {
-                        // Reverse Geocoding
-                        const apiKey = '7a3b208e6c454919afafe11fb6f36331';
-                        const apiUrl = `https://api.geoapify.com/v1/geocode/reverse?lat=${latitude}&lon=${longitude}&apiKey=${apiKey}`;
-                        
-                        const response = await fetch(apiUrl);
-                        const data = await response.json();
+    // Use speech synthesis to vocalize text instructions
+    function speakText(text) {
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        window.speechSynthesis.speak(utterance);
+      }
+    }
 
-                        let locationDetails = {
-                            latitude: latitude,
-                            longitude: longitude,
-                            timestamp: new Date()
-                        };
-
-                        if (data.features && data.features.length > 0) {
-                            const location = data.features[0].properties;
-                            locationDetails = {
-                                ...locationDetails,
-                                place: location.city || location.town || location.village || 'Unknown place',
-                                district: location.county || 'Unknown district',
-                                country: location.country || 'Unknown country',
-                                formatted_address: location.formatted || 'No address found'
-                            };
-                        }
-
-                        // Update UI elements
-                        document.getElementById('start-lat').value = latitude;
-                        document.getElementById('start-lng').value = longitude;
-                        
-                        const locationDesc = `${locationDetails.place}, ${locationDetails.country}`;
-                        document.getElementById('location-description').textContent = locationDesc;
-                        speakText(`Your current location is ${locationDesc}`);
-                        
-                        validateInputs();
-                    } catch (error) {
-                        console.error('Location fetch error:', error);
-                        speakText("Error retrieving location");
-                    }
-                }, (error) => {
-                    speakText("Location access denied");
-                });
-            }
-        }
-
-        function speakText(text) {
-            speechSynthesis.cancel();
-            currentUtterance = new SpeechSynthesisUtterance(text);
-            currentUtterance.lang = "en-US";
-            currentUtterance.rate = document.getElementById('speech-rate').value;
-            speechSynthesis.speak(currentUtterance);
-        }
-
-        function pauseDirections() {
-            speechSynthesis.pause();
-            speakText("Directions paused");
-        }
-
-        function resumeDirections() {
-            speechSynthesis.resume();
-            speakText("Resuming directions");
-        }
-
-        function repeatDirections() {
-            if (currentStepIndex > 0) currentStepIndex--;
-            speakNextStep();
-        }
-
-        function adjustSpeechRate() {
-            if (currentUtterance) {
-                currentUtterance.rate = document.getElementById('speech-rate').value;
-                speakText("Speech rate updated");
-            }
-        }
-
-        // Initialize on page load
-        window.onload = function() {
-            initMap();
-            fetchAndDisplayLocation();
-        };
-
-        // Expose functions to global scope
-        window.toggleMicrophone = toggleMicrophone;
-        window.calculateAndSpeakDetailedRoute = calculateAndSpeakDetailedRoute;
-        window.pauseDirections = pauseDirections;
-        window.resumeDirections = resumeDirections;
-        window.repeatDirections = repeatDirections;
-        window.adjustSpeechRate = adjustSpeechRate;
-        window.speakNextStep = speakNextStep;
-    </script>
+    // Initialize application by obtaining current location
+    goToCurrentLocation();
+  </script>
 </body>
 </html>
