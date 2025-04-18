@@ -111,13 +111,11 @@
     let currentLat, currentLng;
     let instructions = [], coordinates = [], currentInstructionIndex = 0;
     let hotspotMarkers = [];
+    let announcementInterval;
 
-    // Configure a production-ready OSRM service
-    const osrmRouter = L.Routing.osrmv1({
-      serviceUrl: 'https://router.project-osrm.org/route/v1'
-    });
+    // Configure OSRM service
+    const osrmRouter = L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' });
 
-    // Initialize
     document.addEventListener('DOMContentLoaded', locateMe);
 
     function locateMe() {
@@ -140,8 +138,6 @@
       marker.on('dragend', () => { const p = marker.getLatLng(); currentLat = p.lat; currentLng = p.lng; reverseGeocode(p.lat,p.lng); });
       reverseGeocode(lat, lng);
       startWatchingPosition();
-
-      // Autocomplete listener
       document.getElementById('to').addEventListener('input', handleAutocomplete);
     }
 
@@ -199,18 +195,9 @@
         }).catch(console.error);
     }
 
-    function calculateRouteTo(lat, lon) {
-      if (routeControl) map.removeControl(routeControl);
-      routeControl = L.Routing.control({
-        waypoints: [L.latLng(currentLat,currentLng), L.latLng(lat,lon)],
-        router: osrmRouter,
-        routeWhileDragging: true,
-        show: false
-      }).addTo(map);
-      routeControl.on('routesfound', onRouteFound);
-    }
-
     function onRouteFound(e) {
+      // Clear previous interval
+      if (announcementInterval) clearInterval(announcementInterval);
       const route = e.routes[0];
       const sum = route.summary;
       coordinates = route.coordinates;
@@ -220,6 +207,8 @@
         index: inst.index
       }));
       currentInstructionIndex = 0;
+
+      // Display in panel
       const panel = document.getElementById('direction-panel');
       panel.innerHTML = `<div class="font-bold mb-1">Route: ${Math.round(sum.totalDistance)} m, ETA: ${Math.round(sum.totalTime/60)} min</div>`;
       instructions.forEach((ins,i) => {
@@ -227,7 +216,32 @@
         d.innerText = `${i+1}. ${ins.text} (${Math.round(ins.distance)} m)`;
         panel.appendChild(d);
       });
+
+      // Announce first instruction
       if (instructions.length) speakText(instructions[0].text);
+
+      // Start periodic announcement every 5s
+      announcementInterval = setInterval(() => {
+        if (currentInstructionIndex >= instructions.length) {
+          clearInterval(announcementInterval);
+          return;
+        }
+        const next = instructions[currentInstructionIndex];
+        const pt = coordinates[next.index];
+        const dist = getDistance(currentLat, currentLng, pt.lat, pt.lng);
+        if (dist <= 50) {
+          // Reached point, move to next
+          currentInstructionIndex++;
+          if (currentInstructionIndex < instructions.length) {
+            speakText(instructions[currentInstructionIndex].text);
+          } else {
+            clearInterval(announcementInterval);
+          }
+        } else {
+          // Repeat instruction
+          speakText(next.text);
+        }
+      }, 5000);
     }
 
     function startWatchingPosition() {
@@ -235,15 +249,20 @@
       watchId = navigator.geolocation.watchPosition(pos => {
         currentLat = pos.coords.latitude; currentLng = pos.coords.longitude;
         marker.setLatLng([currentLat,currentLng]);
-        if (instructions.length && currentInstructionIndex < instructions.length) {
-          const next = instructions[currentInstructionIndex];
-          const pt = coordinates[next.index];
-          if (pt && getDistance(currentLat,currentLng,pt.lat,pt.lng) < 20) {
-            currentInstructionIndex++;
-            if (currentInstructionIndex < instructions.length) speakText(instructions[currentInstructionIndex].text);
-          }
-        }
       }, console.error, { enableHighAccuracy:true, maximumAge:0 });
+    }
+
+    function getDistance(lat1,lon1,lat2,lon2) {
+      const R = 6371000, r = Math.PI/180;
+      const dLat = (lat2-lat1)*r, dLon = (lon2-lon1)*r;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLon/2)**2;
+      return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+    }
+
+    function speakText(txt) {
+      if (!('speechSynthesis' in window)) return;
+      const utter = new SpeechSynthesisUtterance(txt);
+      window.speechSynthesis.speak(utter);
     }
 
     function findNearbyHotspots() {
@@ -268,17 +287,15 @@
         }).catch(err => { console.error(err); listEl.innerHTML = "Error retrieving hotspots."; });
     }
 
-    function getDistance(lat1,lon1,lat2,lon2) {
-      const R = 6371000, r = Math.PI/180;
-      const dLat = (lat2-lat1)*r, dLon = (lon2-lon1)*r;
-      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLon/2)**2;
-      return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-    }
-
-    function speakText(txt) {
-      if (!('speechSynthesis' in window)) return;
-      const utter = new SpeechSynthesisUtterance(txt);
-      window.speechSynthesis.speak(utter);
+    function calculateRouteTo(lat, lon) {
+      if (routeControl) map.removeControl(routeControl);
+      routeControl = L.Routing.control({
+        waypoints: [L.latLng(currentLat,currentLng), L.latLng(lat,lon)],
+        router: osrmRouter,
+        routeWhileDragging: true,
+        show: false
+      }).addTo(map);
+      routeControl.on('routesfound', onRouteFound);
     }
   </script>
 </body>
