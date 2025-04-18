@@ -98,10 +98,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore-compat.js"></script>
   
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore.js"></script>
+
     <script>
       // Replace with your Firebase config
       const firebaseConfig = {
@@ -132,6 +129,8 @@
         this.classList.toggle('selected');
       });
     });
+
+    
 
     // Map user types to related features
     const userTypeFeatures = {
@@ -176,9 +175,11 @@
       });
       
       try {
-        await db.collection('users').doc(user.uid).update({
-          selectedFeatures: selectedFeatures
-        });
+       // A) create the doc for the first time (should succeed under your current rules)
+      await db.collection('users')
+        .doc(auth.currentUser.uid)
+        .set({ selectedFeatures: myFeatures });
+
         showPopup("Selection saved successfully!");
         window.location.href = "index.html";
       } catch (error) {
@@ -189,10 +190,35 @@
     });
 
     auth.onAuthStateChanged(user => {
-      if (!user) {
-        window.location.href = "login.html";
+  if (!user) {
+    window.location.href = "login.html";
+  } else {
+    document.getElementById('saveSelection').addEventListener('click', async () => {
+      const saveBtn = document.getElementById('saveSelection');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...`;
+
+      const selectedFeatures = [];
+      document.querySelectorAll('#feature-cards .card-select.selected').forEach(card => {
+        selectedFeatures.push(card.getAttribute('data-feature'));
+      });
+
+      try {
+        await db.collection('users').doc(user.uid).set({
+          selectedFeatures: selectedFeatures
+        }, { merge: true });
+
+        showPopup("Selection saved successfully!");
+        window.location.href = "index.html";
+      } catch (error) {
+        showPopup("Error saving selection: " + error.message);
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = "Save Selection";
       }
     });
+  }
+});
+
   </script>
 </body>
 </html>
