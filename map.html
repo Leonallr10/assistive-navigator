@@ -37,8 +37,10 @@
 
   <!-- Nav Bar -->
   <nav class="bg-gray-800 p-4">
-    <div class="container mx-auto">
+    <div class="container mx-auto flex items-center justify-between">
       <h1 class="text-white text-xl font-bold">Navigation Pro</h1>
+      <!-- Previous Location Button -->
+      <button id="prev-btn" class="p-2 bg-yellow-500 text-white rounded shadow hover:bg-yellow-600" onclick="routeToPrevious()">Previous Location</button>
     </div>
   </nav>
 
@@ -112,6 +114,7 @@
     let instructions = [], coordinates = [], currentInstructionIndex = 0;
     let hotspotMarkers = [];
     let announcementInterval;
+    let prevLat = null, prevLng = null; // store previous location (last destination)
 
     // Configure OSRM service
     const osrmRouter = L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' });
@@ -185,6 +188,10 @@
         .then(data => {
           if (!data.length) return alert("Destination not found.");
           const [lat, lon] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+          // store previous destination
+          prevLat = lat;
+          prevLng = lon;
+
           routeControl = L.Routing.control({
             waypoints: [L.latLng(currentLat,currentLng), L.latLng(lat,lon)],
             router: osrmRouter,
@@ -195,8 +202,13 @@
         }).catch(console.error);
     }
 
+    function routeToPrevious() {
+      if (prevLat === null || prevLng === null) return alert("No previous location found.");
+      if (routeControl) map.removeControl(routeControl);
+      calculateRouteTo(prevLat, prevLng);
+    }
+
     function onRouteFound(e) {
-      // Clear previous interval
       if (announcementInterval) clearInterval(announcementInterval);
       const route = e.routes[0];
       const sum = route.summary;
@@ -208,7 +220,6 @@
       }));
       currentInstructionIndex = 0;
 
-      // Display in panel
       const panel = document.getElementById('direction-panel');
       panel.innerHTML = `<div class="font-bold mb-1">Route: ${Math.round(sum.totalDistance)} m, ETA: ${Math.round(sum.totalTime/60)} min</div>`;
       instructions.forEach((ins,i) => {
@@ -217,10 +228,8 @@
         panel.appendChild(d);
       });
 
-      // Announce first instruction
       if (instructions.length) speakText(instructions[0].text);
 
-      // Start periodic announcement every 5s
       announcementInterval = setInterval(() => {
         if (currentInstructionIndex >= instructions.length) {
           clearInterval(announcementInterval);
@@ -230,17 +239,10 @@
         const pt = coordinates[next.index];
         const dist = getDistance(currentLat, currentLng, pt.lat, pt.lng);
         if (dist <= 50) {
-          // Reached point, move to next
           currentInstructionIndex++;
-          if (currentInstructionIndex < instructions.length) {
-            speakText(instructions[currentInstructionIndex].text);
-          } else {
-            clearInterval(announcementInterval);
-          }
-        } else {
-          // Repeat instruction
-          speakText(next.text);
-        }
+          if (currentInstructionIndex < instructions.length) speakText(instructions[currentInstructionIndex].text);
+          else clearInterval(announcementInterval);
+        } else speakText(next.text);
       }, 5000);
     }
 
@@ -270,7 +272,7 @@
       hotspotMarkers.forEach(m => map.removeLayer(m)); hotspotMarkers = [];
       const listEl = document.getElementById('hotspot-list'); listEl.innerHTML = "Searching…";
       const type = document.getElementById('hotspot-type').value;
-      const query = `[out:json]; node["amenity"="${type}"](around:1000,${currentLat},${currentLng}); out center;`;
+      const query = `[out:json]; node[\"amenity\"=\"${type}\"](around:1000,${currentLat},${currentLng}); out center;`;
       fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`)
         .then(r => r.json())
         .then(data => {
@@ -289,6 +291,11 @@
 
     function calculateRouteTo(lat, lon) {
       if (routeControl) map.removeControl(routeControl);
+      // store previous destination
+      if (lat !== prevLat || lon !== prevLng) {
+        prevLat = lat;
+        prevLng = lon;
+      }
       routeControl = L.Routing.control({
         waypoints: [L.latLng(currentLat,currentLng), L.latLng(lat,lon)],
         router: osrmRouter,
