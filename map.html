@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <!-- Leaflet Routing Machine CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+  <!-- Leaflet GeometryUtil -->
+  <script src="https://unpkg.com/leaflet-geometryutil@0.10.0/dist/leaflet.geometryutil.js"></script>
   <style>
     html, body { height:100%; margin:0; }
     #map { height:60vh; width:100%; }
@@ -117,6 +119,8 @@
     let prevLat = null, prevLng = null;
     let routePolyline, totalDistance;
     let currentManeuverIndex = 0;
+    let lastAnnouncedDistance = null;
+    let previousManeuverIndex = -1;
 
     const osrmRouter = L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' });
 
@@ -238,8 +242,10 @@
       });
 
       currentManeuverIndex = 0;
+      lastAnnouncedDistance = null;
+      previousManeuverIndex = -1;
       if (instructions.length > 0) {
-        speakText(instructions[0].text);
+        speakText(`${instructions[0].text} for ${Math.round(instructions[0].distance)} meters`);
       }
 
       announcementInterval = setInterval(() => {
@@ -252,16 +258,26 @@
           currentManeuverIndex += 1;
         }
 
+        if (currentManeuverIndex !== previousManeuverIndex) {
+          lastAnnouncedDistance = null;
+          previousManeuverIndex = currentManeuverIndex;
+        }
+
         if (currentManeuverIndex < instructions.length - 1) {
           const nextIns = instructions[currentManeuverIndex + 1];
           const remainingDistance = nextIns.cumulativeDistance - userDistance;
           if (remainingDistance <= 50 && !nextIns.announced50m) {
             speakText(`In ${Math.round(remainingDistance)} meters, ${nextIns.text}`);
             nextIns.announced50m = true;
-          }
-          if (remainingDistance <= 10 && !nextIns.announced10m) {
+          } else if (remainingDistance <= 10 && !nextIns.announced10m) {
             speakText(`${nextIns.text} now`);
             nextIns.announced10m = true;
+          } else if (remainingDistance > 50) {
+            const roundedDistance = Math.round(remainingDistance / 10) * 10;
+            if (roundedDistance !== lastAnnouncedDistance) {
+              speakText(`Continue straight for ${roundedDistance} meters`);
+              lastAnnouncedDistance = roundedDistance;
+            }
           }
         } else if (currentManeuverIndex === instructions.length - 1 && userDistance >= instructions[currentManeuverIndex].cumulativeDistance - 10) {
           speakText("You have arrived at your destination");
