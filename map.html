@@ -111,10 +111,12 @@
     // Globals
     let map, marker, routeControl, watchId;
     let currentLat, currentLng;
-    let instructions = [], coordinates = [], currentInstructionIndex = 0;
+    let instructions = [];
     let hotspotMarkers = [];
     let announcementInterval;
     let prevLat = null, prevLng = null;
+    let routePolyline, totalDistance;
+    let currentManeuverIndex = 0;
 
     const osrmRouter = L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' });
 
@@ -123,13 +125,13 @@
     function locateMe() {
       if (!navigator.geolocation) {
         alert("Geolocation not supported—using default view.");
-        initMap(20,77);
+        initMap(20, 77);
         return;
       }
       navigator.geolocation.getCurrentPosition(
         pos => { currentLat = pos.coords.latitude; currentLng = pos.coords.longitude; initMap(currentLat, currentLng); },
-        err => { console.warn(err.message); alert("Could not get location—default view."); initMap(20,77); },
-        { enableHighAccuracy:true }
+        err => { console.warn(err.message); alert("Could not get location: " + err.message); initMap(20, 77); },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
 
@@ -137,7 +139,7 @@
       map = L.map('map').setView([lat, lng], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
       marker = L.marker([lat, lng], { draggable: true }).addTo(map).bindPopup("You are here").openPopup();
-      marker.on('dragend', () => { const p = marker.getLatLng(); currentLat = p.lat; currentLng = p.lng; reverseGeocode(p.lat,p.lng); });
+      marker.on('dragend', () => { const p = marker.getLatLng(); currentLat = p.lat; currentLng = p.lng; reverseGeocode(p.lat, p.lng); });
       reverseGeocode(lat, lng);
       startWatchingPosition();
       document.getElementById('to').addEventListener('input', handleAutocomplete);
@@ -188,13 +190,13 @@
           if (!data.length) return alert("Destination not found.");
           const [lat, lon] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
           prevLat = lat; prevLng = lon;
-          routeControl = L.Routing.control({ waypoints: [L.latLng(currentLat,currentLng), L.latLng(lat,lon)], router: osrmRouter, routeWhileDragging: true, show: false }).addTo(map);
+          routeControl = L.Routing.control({ waypoints: [L.latLng(currentLat, currentLng), L.latLng(lat, lon)], router: osrmRouter, routeWhileDragging: true, show: false }).addTo(map);
           routeControl.on('routesfound', onRouteFound);
         }).catch(console.error);
     }
 
     function routeToPrevious() {
-      if (prevLat===null || prevLng===null) return alert("No previous location found.");
+      if (prevLat === null || prevLng === null) return alert("No previous location found.");
       if (routeControl) map.removeControl(routeControl);
       calculateRouteTo(prevLat, prevLng);
     }
@@ -202,61 +204,93 @@
     function onRouteFound(e) {
       if (announcementInterval) clearInterval(announcementInterval);
       const route = e.routes[0];
-      const sum   = route.summary;
-      coordinates = route.coordinates;
+      const sum = route.summary;
+      totalDistance = sum.totalDistance;
+      routePolyline = L.polyline(route.coordinates);
 
       instructions = route.instructions.map(inst => {
         let txt = inst.text;
         const dist = Math.round(inst.distance);
         txt = txt.replace(/\b(north|south|east|west)\b/gi, '').trim();
         txt = txt.replace(/^Head\s*/i, 'Go straight ');
-        return { text: txt, distance: dist, index: inst.index };
+        return { text: txt, distance: dist, index: inst.index, cumulativeDistance: 0, announced50m: false, announced10m: false };
       });
 
-      currentInstructionIndex = 0;
+      // Compute cumulative distances
+      let cumulative = 0;
+      const cumulativeDistances = [0];
+      for (let i = 1; i < route.coordinates.length; i++) {
+        const p1 = route.coordinates[i - 1];
+        const p2 = route.coordinates[i];
+        cumulative += getDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+        cumulativeDistances.push(cumulative);
+      }
+      instructions.forEach(ins => {
+        ins.cumulativeDistance = cumulativeDistances[ins.index];
+      });
+
       const panel = document.getElementById('direction-panel');
-      panel.innerHTML = `<div class="font-bold mb-1">Route: ${Math.round(sum.totalDistance)} m, ETA: ${Math.round(sum.totalTime/60)} min</div>`;
-      instructions.forEach((ins,i) => {
+      panel.innerHTML = `<div class="font-bold mb-1">Route: ${Math.round(sum.totalDistance)} m, ETA: ${Math.round(sum.totalTime / 60)} min</div>`;
+      instructions.forEach((ins, i) => {
         const d = document.createElement('div');
-        d.innerText = `${i+1}. ${ins.text} (${ins.distance} m)`;
+        d.innerText = `${i + 1}. ${ins.text} (${ins.distance} m)`;
         panel.appendChild(d);
       });
 
-      const first = instructions[0];
-      speakText(`${first.text} for ${first.distance} meters`);
+      currentManeuverIndex = 0;
+      if (instructions.length > 0) {
+        speakText(instructions[0].text);
+      }
 
       announcementInterval = setInterval(() => {
-        if (currentInstructionIndex >= instructions.length) { clearInterval(announcementInterval); return; }
-        const ins = instructions[currentInstructionIndex];
-        const pt  = coordinates[ins.index];
-        const rem = getDistance(currentLat, currentLng, pt.lat, pt.lng);
-        if (rem <= ins.distance) {
-          currentInstructionIndex++;
-          if (currentInstructionIndex < instructions.length) {
-            const next = instructions[currentInstructionIndex];
-            speakText(`${next.text} for ${next.distance} meters`);
-          } else clearInterval(announcementInterval);
+        const userLatLng = L.latLng(currentLat, currentLng);
+        const t = L.GeometryUtil.locateOnLine(map, routePolyline, userLatLng);
+        const userDistance = t * totalDistance;
+
+        // Update currentManeuverIndex
+        while (currentManeuverIndex < instructions.length - 1 && userDistance >= instructions[currentManeuverIndex + 1].cumulativeDistance) {
+          currentManeuverIndex += 1;
+        }
+
+        if (currentManeuverIndex < instructions.length - 1) {
+          const nextIns = instructions[currentManeuverIndex + 1];
+          const remainingDistance = nextIns.cumulativeDistance - userDistance;
+          if (remainingDistance <= 50 && !nextIns.announced50m) {
+            speakText(`In ${Math.round(remainingDistance)} meters, ${nextIns.text}`);
+            nextIns.announced50m = true;
+          }
+          if (remainingDistance <= 10 && !nextIns.announced10m) {
+            speakText(`${nextIns.text} now`);
+            nextIns.announced10m = true;
+          }
+        } else if (currentManeuverIndex === instructions.length - 1 && userDistance >= instructions[currentManeuverIndex].cumulativeDistance - 10) {
+          speakText("You have arrived at your destination");
+          clearInterval(announcementInterval);
         }
       }, 5000);
     }
 
     function calculateRouteTo(lat, lon) {
       if (routeControl) map.removeControl(routeControl);
-      if (lat!==prevLat || lon!==prevLng) { prevLat=lat; prevLng=lon; }
-      routeControl = L.Routing.control({ waypoints: [L.latLng(currentLat,currentLng), L.latLng(lat,lon)], router: osrmRouter, routeWhileDragging: true, show: false }).addTo(map);
+      if (lat !== prevLat || lon !== prevLng) { prevLat = lat; prevLng = lon; }
+      routeControl = L.Routing.control({ waypoints: [L.latLng(currentLat, currentLng), L.latLng(lat, lon)], router: osrmRouter, routeWhileDragging: true, show: false }).addTo(map);
       routeControl.on('routesfound', onRouteFound);
     }
 
     function startWatchingPosition() {
       if (watchId) navigator.geolocation.clearWatch(watchId);
-      watchId = navigator.geolocation.watchPosition(pos => { currentLat = pos.coords.latitude; currentLng = pos.coords.longitude; marker.setLatLng([currentLat,currentLng]); }, console.error, { enableHighAccuracy:true, maximumAge:0 });
+      watchId = navigator.geolocation.watchPosition(
+        pos => { currentLat = pos.coords.latitude; currentLng = pos.coords.longitude; marker.setLatLng([currentLat, currentLng]); },
+        err => { console.error(err); alert("Error getting location: " + err.message); },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
     }
 
-    function getDistance(lat1,lon1,lat2,lon2) {
-      const R=6371000, r=Math.PI/180;
-      const dLat=(lat2-lat1)*r, dLon=(lon2-lon1)*r;
-      const a=Math.sin(dLat/2)**2 + Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLon/2)**2;
-      return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371000, r = Math.PI / 180;
+      const dLat = (lat2 - lat1) * r, dLon = (lon2 - lon1) * r;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     function speakText(txt) {
@@ -267,24 +301,24 @@
 
     function findNearbyHotspots() {
       if (!currentLat || !currentLng) return alert("Please let us get your location first.");
-      hotspotMarkers.forEach(m=>map.removeLayer(m)); hotspotMarkers=[];
+      hotspotMarkers.forEach(m => map.removeLayer(m)); hotspotMarkers = [];
       const listEl = document.getElementById('hotspot-list'); listEl.innerHTML = "Searching…";
       const type = document.getElementById('hotspot-type').value;
       const query = `[out:json]; node["amenity"="${type}"](around:1000,${currentLat},${currentLng}); out center;`;
       fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`)
-        .then(r=>r.json())
-        .then(data=>{
+        .then(r => r.json())
+        .then(data => {
           listEl.innerHTML = "<strong>Nearby Hotspots:</strong><br>";
-          data.elements.forEach(el=>{
-            const lat = el.lat||el.center.lat, lon = el.lon||el.center.lon;
-            const name=el.tags?.name||"Unnamed";
-            const m=L.marker([lat,lon]).addTo(map).bindTooltip(name).bindPopup(name).on('click',()=>calculateRouteTo(lat,lon));
+          data.elements.forEach(el => {
+            const lat = el.lat || el.center.lat, lon = el.lon || el.center.lon;
+            const name = el.tags?.name || "Unnamed";
+            const m = L.marker([lat, lon]).addTo(map).bindTooltip(name).bindPopup(name).on('click', () => calculateRouteTo(lat, lon));
             hotspotMarkers.push(m);
-            const div=document.createElement('div'); div.className="cursor-pointer py-1 border-b"; div.innerText=name;
-            div.onclick=()=>calculateRouteTo(lat,lon);
+            const div = document.createElement('div'); div.className = "cursor-pointer py-1 border-b"; div.innerText = name;
+            div.onclick = () => calculateRouteTo(lat, lon);
             listEl.appendChild(div);
           });
-        }).catch(err=>{ console.error(err); listEl.innerHTML="Error retrieving hotspots."; });
+        }).catch(err => { console.error(err); listEl.innerHTML = "Error retrieving hotspots."; });
     }
   </script>
 </body>
